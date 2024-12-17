@@ -1,0 +1,140 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  PROTOC_VERSION: "24.4"
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - os: windows-latest
+            server_name: robot_admin.exe
+            client_name: test_client.exe
+            server_asset: robot_admin-windows-amd64.exe
+            client_asset: test_client-windows-amd64.exe
+            platform: windows
+          - os: ubuntu-latest
+            server_name: robot_admin
+            client_name: test_client
+            server_asset: robot_admin-linux-amd64
+            client_asset: test_client-linux-amd64
+            platform: linux
+          - os: macos-latest
+            server_name: robot_admin
+            client_name: test_client
+            server_asset: robot_admin-macos-amd64
+            client_asset: test_client-macos-amd64
+            platform: macos
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Protoc (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler
+
+    - name: Install Protoc (macOS)
+      if: matrix.os == 'macos-latest'
+      run: brew install protobuf
+
+    - name: Install Protoc (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-win64.zip" -OutFile "protoc.zip"
+        Expand-Archive -Path "protoc.zip" -DestinationPath "$env:GITHUB_WORKSPACE\protoc"
+        echo "$env:GITHUB_WORKSPACE\protoc\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+        Get-ChildItem "$env:GITHUB_WORKSPACE\protoc\bin"
+        echo "PROTOC=$env:GITHUB_WORKSPACE\protoc\bin\protoc.exe" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+
+    - name: Print Environment (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        echo "Path: $env:PATH"
+        echo "PROTOC: $env:PROTOC"
+        if (Test-Path $env:PROTOC) {
+          echo "protoc exists at specified path"
+        } else {
+          echo "protoc not found at specified path"
+        }
+
+    - name: Build Server
+      run: cargo build --release --bin robot_admin
+
+    - name: Build Client
+      run: cargo build --release --bin test_client
+
+    - name: Prepare Release Assets
+      if: startsWith(github.ref, 'refs/tags/')
+      shell: bash
+      run: |
+        mkdir -p release-assets
+        cp "target/release/${{ matrix.server_name }}" "release-assets/${{ matrix.server_asset }}"
+        cp "target/release/${{ matrix.client_name }}" "release-assets/${{ matrix.client_asset }}"
+
+    - name: Upload Release Assets
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-assets-${{ matrix.platform }}
+        path: release-assets/*
+        retention-days: 5
+
+  create_release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-windows
+          path: release-assets
+
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-linux
+          path: release-assets
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-macos
+          path: release-assets
+
+      - name: Display structure of downloaded files
+        run: ls -R release-assets
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
