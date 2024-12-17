@@ -32,7 +32,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 注册客户端
     let register_request = Request::new(RegisterRequest {
         client_name: "test_client_1".to_string(),
-        client_type: "game_test".to_string(),
+        client_type: "load_test".to_string(),  // 指定为负载测试
+        max_players: 100,  // 设置最大支持100个玩家
+        version: env!("CARGO_PKG_VERSION").to_string(),  // 使用 cargo 包版本
     });
 
     let response = client.register(register_request).await?;
