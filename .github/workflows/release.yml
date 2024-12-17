@@ -16,30 +16,39 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }}
+    name: Build ${{ matrix.os }}-${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
         include:
           - os: windows-latest
+            target: x86_64-pc-windows-msvc
             server_name: robot_admin.exe
             client_name: test_client.exe
             server_asset: robot_admin-windows-amd64.exe
             client_asset: test_client-windows-amd64.exe
             platform: windows
           - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
             server_name: robot_admin
             client_name: test_client
             server_asset: robot_admin-linux-amd64
             client_asset: test_client-linux-amd64
             platform: linux
           - os: macos-latest
+            target: x86_64-apple-darwin
             server_name: robot_admin
             client_name: test_client
             server_asset: robot_admin-macos-amd64
             client_asset: test_client-macos-amd64
-            platform: macos
+            platform: macos-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            server_name: robot_admin
+            client_name: test_client
+            server_asset: robot_admin-macos-arm64
+            client_asset: test_client-macos-arm64
+            platform: macos-arm64
 
     steps:
     - uses: actions/checkout@v4
@@ -69,6 +78,7 @@ jobs:
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
+        target: ${{ matrix.target }}
         profile: minimal
         override: true
 
@@ -85,18 +95,18 @@ jobs:
         }
 
     - name: Build Server
-      run: cargo build --release --bin robot_admin
+      run: cargo build --release --bin robot_admin --target ${{ matrix.target }}
 
     - name: Build Client
-      run: cargo build --release --bin test_client
+      run: cargo build --release --bin test_client --target ${{ matrix.target }}
 
     - name: Prepare Release Assets
       if: startsWith(github.ref, 'refs/tags/')
       shell: bash
       run: |
         mkdir -p release-assets
-        cp "target/release/${{ matrix.server_name }}" "release-assets/${{ matrix.server_asset }}"
-        cp "target/release/${{ matrix.client_name }}" "release-assets/${{ matrix.client_asset }}"
+        cp "target/${{ matrix.target }}/release/${{ matrix.server_name }}" "release-assets/${{ matrix.server_asset }}"
+        cp "target/${{ matrix.target }}/release/${{ matrix.client_name }}" "release-assets/${{ matrix.client_asset }}"
 
     - name: Upload Release Assets
       if: startsWith(github.ref, 'refs/tags/')
@@ -123,10 +133,16 @@ jobs:
           name: release-assets-linux
           path: release-assets
 
-      - name: Download macOS artifacts
+      - name: Download macOS (AMD64) artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release-assets-macos
+          name: release-assets-macos-amd64
+          path: release-assets
+
+      - name: Download macOS (ARM64) artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-assets-macos-arm64
           path: release-assets
 
       - name: Display structure of downloaded files
