@@ -1,0 +1,53 @@
+syntax = "proto3";
+package game_control;
+
+// The game control service definition
+service GameControl {
+    // Send command to game client
+    rpc SendCommand (CommandRequest) returns (CommandResponse);
+    
+    // Client registration
+    rpc Register (RegisterRequest) returns (RegisterResponse);
+    
+    // Stream status updates from client
+    rpc StreamStatus (StatusRequest) returns (stream StatusResponse);
+}
+
+// Command request from web interface to game client
+message CommandRequest {
+    string client_id = 1;
+    string command = 2;
+    map<string, string> parameters = 3;
+}
+
+// Response from game client after receiving command
+message CommandResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// Client registration request
+message RegisterRequest {
+    string client_name = 1;
+    string client_type = 2;
+}
+
+// Registration response
+message RegisterResponse {
+    string client_id = 1;
+    bool success = 2;
+    string message = 3;
+}
+
+// Status request
+message StatusRequest {
+    string client_id = 1;
+}
+
+// Status response from game client
+message StatusResponse {
+    string client_id = 1;
+    string status = 2;
+    map<string, string> metrics = 3;
+    int64 timestamp = 4;
+}

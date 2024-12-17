@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Test Client Control</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .client-status {
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Game Test Client Control Panel</h1>
+        
+        <!-- Client List -->
+        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Connected Clients</h2>
+            <div id="clientList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Client cards will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Command Panel -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">Send Command</h2>
+            <form id="commandForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Client ID</label>
+                    <select id="clientSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <option value="">Select a client...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Command</label>
+                    <input type="text" id="commandInput" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Parameters (JSON)</label>
+                    <textarea id="parametersInput" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" rows="4">{}</textarea>
+                </div>
+                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+                    Send Command
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Client status management
+        const clients = new Map();
+
+        async function updateClientList() {
+            try {
+                const response = await fetch('/api/clients');
+                const data = await response.json();
+                
+                // Update client cards
+                const clientList = document.getElementById('clientList');
+                clientList.innerHTML = '';
+                
+                // Update client select
+                const clientSelect = document.getElementById('clientSelect');
+                clientSelect.innerHTML = '<option value="">Select a client...</option>';
+                
+                data.clients.forEach(client => {
+                    // Create client card
+                    const card = document.createElement('div');
+                    card.className = 'client-status bg-white border rounded-lg p-4 shadow-sm';
+                    card.innerHTML = `
+                        <h3 class="font-semibold">${client.client_name}</h3>
+                        <p class="text-sm text-gray-600">ID: ${client.client_id}</p>
+                    `;
+                    clientList.appendChild(card);
+                    
+                    // Add to select
+                    const option = document.createElement('option');
+                    option.value = client.client_id;
+                    option.textContent = `${client.client_name} (${client.client_id})`;
+                    clientSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error fetching clients:', error);
+            }
+        }
+
+        // Update client list every 5 seconds
+        setInterval(updateClientList, 5000);
+        // Initial update
+        updateClientList();
+
+        // Command submission
+        document.getElementById('commandForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const clientId = document.getElementById('clientSelect').value;
+            const command = document.getElementById('commandInput').value;
+            let parameters;
+            
+            try {
+                parameters = JSON.parse(document.getElementById('parametersInput').value);
+            } catch (error) {
+                alert('Invalid JSON in parameters');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        client_id: clientId,
+                        command,
+                        parameters,
+                    }),
+                });
+
+                const result = await response.json();
+                if (!result.success) {
+                    alert(`Error: ${result.message}`);
+                } else {
+                    alert(`Success: ${result.message}`);
+                }
+            } catch (error) {
+                alert('Failed to send command');
+                console.error('Error:', error);
+            }
+        });
+    </script>
+</body>
+</html>
