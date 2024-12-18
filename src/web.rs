@@ -29,6 +29,9 @@ pub struct ApiResponse {
 pub struct ClientInfo {
     client_id: String,
     client_name: String,
+    client_type: String,
+    max_players: u32,
+    version: String,
 }
 
 #[derive(Serialize)]
@@ -53,14 +56,16 @@ async fn list_clients(
     State(game_service): State<Arc<GameControlService>>,
 ) -> Json<ClientListResponse> {
     let clients = game_service.get_clients().await;
-    let client_list = clients
+    let client_list: Vec<ClientInfo> = clients
         .iter()
-        .map(|(id, name)| ClientInfo {
+        .map(|(id, client)| ClientInfo {
             client_id: id.clone(),
-            client_name: name.clone(),
+            client_name: client.name.clone(),
+            client_type: client.client_type.clone(),
+            max_players: client.max_players,
+            version: client.version.clone(),
         })
         .collect();
-
     Json(ClientListResponse {
         clients: client_list,
     })
