@@ -4,132 +4,214 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Test Client Control</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        .client-status {
-            transition: all 0.3s ease;
-        }
-    </style>
+    <link href="/static/css/output.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <script src="/static/js/alpine.min.js" defer></script>
 </head>
-<body class="bg-gray-100">
-    <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-8">Game Test Client Control Panel</h1>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8" x-data="app">
+        <h1 class="text-4xl font-bold mb-8 text-gray-800 text-center">
+            <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-teal-400">
+                Game Test Client Control Panel
+            </span>
+        </h1>
         
         <!-- Client List -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">Connected Clients</h2>
-            <div id="clientList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <!-- Client cards will be inserted here -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-8 border border-gray-100">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center space-x-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Connected Clients</h2>
+                    <div class="flex items-center space-x-2">
+                        <button 
+                            @click="selectAllClients" 
+                            class="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-full transition-colors"
+                            title="Select All"
+                        >
+                            <i class="fas fa-check-double text-lg"></i>
+                        </button>
+                        <button 
+                            @click="clearSelection" 
+                            class="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded-full transition-colors"
+                            title="Clear Selection"
+                        >
+                            <i class="fas fa-times text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <template x-for="client in clients" :key="client.client_id">
+                    <div class="relative bg-white rounded-lg shadow p-6">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-start space-x-4">
+                                <div class="flex-shrink-0 mt-1">
+                                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-desktop text-blue-500 text-xl"></i>
+                                    </div>
+                                </div>
+                                <div class="flex-1 min-w-0 space-y-3">
+                                    <h3 class="text-lg font-semibold text-gray-800 truncate" x-text="client.client_name"></h3>
+                                    <div class="flex items-center space-x-3">
+                                        <span class="bg-blue-100 text-blue-800 text-sm font-medium px-2.5 py-1 rounded" x-text="client.client_type"></span>
+                                        <span class="text-gray-500 text-sm font-medium" x-text="`v${client.version}`"></span>
+                                    </div>
+                                    <p class="text-sm text-gray-600">
+                                        <span class="font-medium">Max Players:</span> 
+                                        <span x-text="client.max_players"></span>
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex-shrink-0">
+                                <input type="checkbox" :id="'client-' + client.client_id" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                    x-model="selectedClients" :value="client.client_id">
+                            </div>
+                        </div>
+                    </div>
+                </template>
             </div>
         </div>
 
         <!-- Command Panel -->
-        <div class="bg-white rounded-lg shadow-md p-6">
-            <h2 class="text-xl font-semibold mb-4">Send Command</h2>
-            <form id="commandForm" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700">Client ID</label>
-                    <select id="clientSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        <option value="">Select a client...</option>
-                    </select>
-                </div>
-                <div>
+        <div class="bg-white rounded-xl shadow-lg p-6 border border-gray-100">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800 flex items-center">
+                <i class="fas fa-paper-plane text-blue-500 text-lg mr-2"></i>
+                Send Command
+                <span x-show="selectedClients.length > 0" class="ml-2 text-sm font-normal text-gray-500">
+                    (Selected: <span x-text="selectedClients.length"></span>)
+                </span>
+            </h2>
+            <form @submit.prevent="sendCommand" class="space-y-6">
+                <div class="space-y-2">
                     <label class="block text-sm font-medium text-gray-700">Command</label>
-                    <input type="text" id="commandInput" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" required>
+                    <input 
+                        type="text" 
+                        x-model="command"
+                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                        placeholder="Enter command..."
+                        required
+                    >
                 </div>
-                <div>
+
+                <div class="space-y-2">
                     <label class="block text-sm font-medium text-gray-700">Parameters (JSON)</label>
-                    <textarea id="parametersInput" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500" rows="4">{}</textarea>
+                    <textarea 
+                        x-model="parameters"
+                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                        rows="4"
+                        placeholder="{}"
+                    ></textarea>
                 </div>
-                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-                    Send Command
+
+                <button 
+                    type="submit"
+                    class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-all duration-200 transform hover:-translate-y-0.5"
+                    :disabled="isSubmitting || selectedClients.length === 0"
+                >
+                    <span class="flex items-center justify-center">
+                        <i x-show="!isSubmitting" class="fas fa-paper-plane text-lg mr-2 text-white"></i>
+                        <i x-show="isSubmitting" class="fas fa-spinner text-lg mr-2 text-white animate-spin"></i>
+                        <span x-text="isSubmitting ? 'Sending...' : 'Send Command'"></span>
+                    </span>
                 </button>
             </form>
         </div>
     </div>
 
     <script>
-        // Client status management
-        const clients = new Map();
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('app', () => ({
+                clients: [],
+                selectedClients: [],
+                command: '',
+                parameters: '{}',
+                isSubmitting: false,
 
-        async function updateClientList() {
-            try {
-                const response = await fetch('/api/clients');
-                const data = await response.json();
-                
-                // Update client cards
-                const clientList = document.getElementById('clientList');
-                clientList.innerHTML = '';
-                
-                // Update client select
-                const clientSelect = document.getElementById('clientSelect');
-                clientSelect.innerHTML = '<option value="">Select a client...</option>';
-                
-                data.clients.forEach(client => {
-                    // Create client card
-                    const card = document.createElement('div');
-                    card.className = 'client-status bg-white border rounded-lg p-4 shadow-sm';
-                    card.innerHTML = `
-                        <h3 class="font-semibold">${client.client_name}</h3>
-                        <p class="text-sm text-gray-600">ID: ${client.client_id}</p>
-                    `;
-                    clientList.appendChild(card);
-                    
-                    // Add to select
-                    const option = document.createElement('option');
-                    option.value = client.client_id;
-                    option.textContent = `${client.client_name} (${client.client_id})`;
-                    clientSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Error fetching clients:', error);
-            }
-        }
+                init() {
+                    this.fetchClients();
+                    setInterval(() => this.fetchClients(), 5000);
+                },
 
-        // Update client list every 5 seconds
-        setInterval(updateClientList, 5000);
-        // Initial update
-        updateClientList();
+                async fetchClients() {
+                    try {
+                        const response = await fetch('/api/clients');
+                        const data = await response.json();
+                        
+                        // 保持现有客户端的顺序和选中状态
+                        const existingClientIds = this.clients.map(c => c.client_id);
+                        const newClients = data.clients.filter(c => !existingClientIds.includes(c.client_id));
+                        const updatedClients = [
+                            ...this.clients.filter(c => data.clients.some(nc => nc.client_id === c.client_id)),
+                            ...newClients
+                        ];
+                        
+                        this.clients = updatedClients;
+                        
+                        // 只清理已断开连接的客户端的选择状态
+                        this.selectedClients = this.selectedClients.filter(id => 
+                            updatedClients.some(client => client.client_id === id)
+                        );
+                    } catch (error) {
+                        console.error('Error fetching clients:', error);
+                    }
+                },
 
-        // Command submission
-        document.getElementById('commandForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const clientId = document.getElementById('clientSelect').value;
-            const command = document.getElementById('commandInput').value;
-            let parameters;
-            
-            try {
-                parameters = JSON.parse(document.getElementById('parametersInput').value);
-            } catch (error) {
-                alert('Invalid JSON in parameters');
-                return;
-            }
+                toggleClient(clientId) {
+                    const index = this.selectedClients.indexOf(clientId);
+                    if (index === -1) {
+                        this.selectedClients.push(clientId);
+                    } else {
+                        this.selectedClients.splice(index, 1);
+                    }
+                },
 
-            try {
-                const response = await fetch('/api/command', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        client_id: clientId,
-                        command,
-                        parameters,
-                    }),
-                });
+                selectAllClients() {
+                    this.selectedClients = this.clients.map(client => client.client_id);
+                },
 
-                const result = await response.json();
-                if (!result.success) {
-                    alert(`Error: ${result.message}`);
-                } else {
-                    alert(`Success: ${result.message}`);
-                }
-            } catch (error) {
-                alert('Failed to send command');
-                console.error('Error:', error);
-            }
-        });
+                clearSelection() {
+                    this.selectedClients = [];
+                },
+
+                async sendCommand() {
+                    if (this.selectedClients.length === 0) {
+                        alert('Please select at least one client');
+                        return;
+                    }
+
+                    this.isSubmitting = true;
+                    try {
+                        const parsedParams = JSON.parse(this.parameters);
+                        
+                        // 并行发送命令到所有选中的客户端
+                        await Promise.all(this.selectedClients.map(async (clientId) => {
+                            const response = await fetch('/api/send_command', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    client_id: clientId,
+                                    command: this.command,
+                                    parameters: parsedParams,
+                                }),
+                            });
+
+                            if (!response.ok) {
+                                throw new Error(`Failed to send command to client ${clientId}`);
+                            }
+                        }));
+
+                        this.command = '';
+                        this.parameters = '{}';
+                    } catch (error) {
+                        console.error('Error sending command:', error);
+                        alert('Failed to send command: ' + error.message);
+                    } finally {
+                        this.isSubmitting = false;
+                    }
+                },
+            }))
+        })
     </script>
 </body>
 </html>

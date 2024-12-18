@@ -15,10 +15,13 @@ use game_control::{
     CommandRequest, CommandResponse, RegisterRequest, RegisterResponse, StatusRequest, StatusResponse,
 };
 
-#[derive(Debug)]
-struct Client {
-    name: String,
-    status_tx: Option<mpsc::Sender<Result<StatusResponse, Status>>>,
+#[derive(Debug, Clone)]
+pub struct Client {
+    pub name: String,
+    pub client_type: String,
+    pub max_players: u32,
+    pub version: String,
+    pub(crate) status_tx: Option<mpsc::Sender<Result<StatusResponse, Status>>>,
 }
 
 #[derive(Debug)]
@@ -33,12 +36,18 @@ impl GameControlService {
         }
     }
 
-    pub async fn get_clients(&self) -> HashMap<String, String> {
+    pub async fn get_clients(&self) -> HashMap<String, Client> {
         let clients = self.clients.read().await;
         tracing::info!("Getting client list: {:?}", clients);
         clients
             .iter()
-            .map(|(id, client)| (id.clone(), client.name.clone()))
+            .map(|(id, client)| (id.clone(), Client {
+                name: client.name.clone(),
+                client_type: client.client_type.clone(),
+                max_players: client.max_players,
+                version: client.version.clone(),
+                status_tx: None,
+            }))
             .collect()
     }
 
@@ -78,8 +87,28 @@ impl GameControl for GameControlService {
         request: Request<RegisterRequest>,
     ) -> Result<Response<RegisterResponse>, Status> {
         let req = request.into_inner();
-        let client_id = format!("{}_{}", req.client_type, uuid::Uuid::new_v4());
         
+        // 检查是否已经存在相同名称的客户端
+        {
+            let clients = self.clients.read().await;
+            if clients.values().any(|client| client.name == req.client_name) {
+                tracing::warn!(
+                    "Client with name {} already exists, disconnecting old client",
+                    req.client_name
+                );
+                // 移除旧的客户端
+                let old_client_id = clients
+                    .iter()
+                    .find(|(_, client)| client.name == req.client_name)
+                    .map(|(id, _)| id.clone());
+                
+                if let Some(id) = old_client_id {
+                    self.remove_client(&id).await;
+                }
+            }
+        } // clients 锁在这里自动释放
+        
+        let client_id = format!("{}_{}", req.client_type, uuid::Uuid::new_v4());
         tracing::info!(
             "Registering new client - Name: {}, Type: {}, ID: {}",
             req.client_name,
@@ -90,14 +119,14 @@ impl GameControl for GameControlService {
         // Store client information
         self.clients.write().await.insert(client_id.clone(), Client {
             name: req.client_name.clone(),
+            client_type: req.client_type.clone(),
+            max_players: req.max_players,
+            version: req.version.clone(),
             status_tx: None,
         });
-        
-        tracing::info!("Client registered successfully. Current clients: {:?}", 
-            self.clients.read().await);
 
         Ok(Response::new(RegisterResponse {
-            client_id,
+            client_id: client_id.clone(),
             success: true,
             message: "Successfully registered".to_string(),
         }))
