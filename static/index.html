@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Game Test Client Control</title>
     <link href="/static/css/output.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome/all.min.css" rel="stylesheet">
     <script src="/static/js/alpine.min.js" defer></script>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -40,30 +40,51 @@
                 </div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <template x-for="client in clients" :key="client.client_id">
+                <template x-for="client in clients" :key="client.id">
                     <div class="relative bg-white rounded-lg shadow p-6">
                         <div class="flex items-start justify-between">
                             <div class="flex items-start space-x-4">
                                 <div class="flex-shrink-0 mt-1">
                                     <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                                        <i class="fas fa-desktop text-blue-500 text-xl"></i>
+                                        <template x-if="client.status && client.status.current_command_id">
+                                            <i class="fas fa-cog fa-spin text-blue-500 text-xl"></i>
+                                        </template>
+                                        <template x-if="!(client.status && client.status.current_command_id)">
+                                            <i class="fas fa-desktop text-blue-500 text-xl"></i>
+                                        </template>
                                     </div>
                                 </div>
                                 <div class="flex-1 min-w-0 space-y-3">
-                                    <h3 class="text-lg font-semibold text-gray-800 truncate" x-text="client.client_name"></h3>
+                                    <div class="flex items-center justify-between">
+                                        <h3 class="text-lg font-semibold text-gray-800 truncate" x-text="client.name"></h3>
+                                    </div>
                                     <div class="flex items-center space-x-3">
                                         <span class="bg-blue-100 text-blue-800 text-sm font-medium px-2.5 py-1 rounded" x-text="client.client_type"></span>
                                         <span class="text-gray-500 text-sm font-medium" x-text="`v${client.version}`"></span>
                                     </div>
-                                    <p class="text-sm text-gray-600">
-                                        <span class="font-medium">Max Players:</span> 
-                                        <span x-text="client.max_players"></span>
-                                    </p>
+                                    <div class="space-y-1 text-sm text-gray-600">
+                                        <p class="flex justify-between">
+                                            <span class="font-medium">Max Players:</span> 
+                                            <span x-text="client.max_players"></span>
+                                        </p>
+                                        <p class="flex justify-between">
+                                            <span class="font-medium">Idle Players:</span>
+                                            <span x-text="client.status?.max_idle_players || 0"></span>
+                                        </p>
+                                        <p class="flex justify-between" x-show="client.status && client.status.current_command_id">
+                                            <span class="font-medium">Current Command:</span>
+                                            <span class="flex items-center space-x-2">
+                                                <span x-text="client.status?.current_command ? `${client.status.current_command} (${client.status.current_command_id})` : ''"></span>
+                                            </span>
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="flex-shrink-0">
-                                <input type="checkbox" :id="'client-' + client.client_id" class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                                    x-model="selectedClients" :value="client.client_id">
+                            <div class="flex-shrink-0" x-show="!(client.status && client.status.current_command_id)">
+                                <input type="checkbox" :id="'client-' + client.id" 
+                                    class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                    x-model="selectedClients" 
+                                    :value="client.id">
                             </div>
                         </div>
                     </div>
@@ -86,17 +107,25 @@
                     <input 
                         type="text" 
                         x-model="command"
-                        class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Enter command..."
                         required
                     >
                 </div>
 
                 <div class="space-y-2">
-                    <label class="block text-sm font-medium text-gray-700">Parameters (JSON)</label>
+                    <div class="flex justify-between items-center">
+                        <label class="block text-sm font-medium text-gray-700">Parameters (JSON)</label>
+                        <span x-show="parametersError" class="text-sm text-red-500" x-text="parametersError"></span>
+                        <span x-show="!parametersError && parameters.trim() !== '{}' && parameters.trim() !== ''" class="text-sm text-green-600">
+                            <i class="fas fa-check mr-1"></i> Valid JSON
+                        </span>
+                    </div>
                     <textarea 
                         x-model="parameters"
+                        @input="validateParameters"
                         class="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 transition-colors duration-200"
+                        :class="{ 'border-red-300 focus:border-red-500 focus:ring-red-500': parametersError }"
                         rows="4"
                         placeholder="{}"
                     ></textarea>
@@ -105,7 +134,8 @@
                 <button 
                     type="submit"
                     class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-600 hover:to-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 transition-all duration-200 transform hover:-translate-y-0.5"
-                    :disabled="isSubmitting || selectedClients.length === 0"
+                    :disabled="isSubmitting || selectedClients.length === 0 || parametersError || !command.trim()"
+                    @click="console.log('Button clicked', {isSubmitting, selectedClients, parametersError, command})"
                 >
                     <span class="flex items-center justify-center">
                         <i x-show="!isSubmitting" class="fas fa-paper-plane text-lg mr-2 text-white"></i>
@@ -124,6 +154,7 @@
                 selectedClients: [],
                 command: '',
                 parameters: '{}',
+                parametersError: '',
                 isSubmitting: false,
 
                 init() {
@@ -135,81 +166,103 @@
                     try {
                         const response = await fetch('/api/clients');
                         const data = await response.json();
+                        console.log('Fetched clients:', data);
                         
-                        // 保持现有客户端的顺序和选中状态
-                        const existingClientIds = this.clients.map(c => c.client_id);
-                        const newClients = data.clients.filter(c => !existingClientIds.includes(c.client_id));
-                        const updatedClients = [
-                            ...this.clients.filter(c => data.clients.some(nc => nc.client_id === c.client_id)),
-                            ...newClients
-                        ];
+                        // 对客户端列表进行排序，首先按照 name 排序
+                        const sortedClients = data.clients.sort((a, b) => {
+                            return a.name.localeCompare(b.name);
+                        });
+                        console.log('Sorted clients:', sortedClients);
                         
-                        this.clients = updatedClients;
+                        // 更新客户端列表
+                        this.clients = sortedClients;
+                        console.log('Updated clients array:', this.clients);
                         
-                        // 只清理已断开连接的客户端的选择状态
+                        // 清理已断开连接的客户端的选择状态
                         this.selectedClients = this.selectedClients.filter(id => 
-                            updatedClients.some(client => client.client_id === id)
+                            sortedClients.some(client => client.id === id)
                         );
                     } catch (error) {
                         console.error('Error fetching clients:', error);
                     }
                 },
 
-                toggleClient(clientId) {
-                    const index = this.selectedClients.indexOf(clientId);
-                    if (index === -1) {
-                        this.selectedClients.push(clientId);
-                    } else {
-                        this.selectedClients.splice(index, 1);
-                    }
-                },
-
                 selectAllClients() {
-                    this.selectedClients = this.clients.map(client => client.client_id);
+                    this.selectedClients = this.clients.map(c => c.id);
                 },
 
                 clearSelection() {
                     this.selectedClients = [];
                 },
 
-                async sendCommand() {
-                    if (this.selectedClients.length === 0) {
-                        alert('Please select at least one client');
+                validateParameters() {
+                    if (!this.parameters.trim()) {
+                        this.parameters = '{}';
+                        this.parametersError = '';
                         return;
                     }
+                    try {
+                        // 尝试修复没有引号的属性名
+                        let fixedJson = this.parameters.replace(/(\{|\,)\s*([a-zA-Z0-9_]+)\s*\:/g, '$1"$2":');
+                        JSON.parse(fixedJson);
+                        if (fixedJson !== this.parameters) {
+                            this.parameters = fixedJson;
+                        }
+                        this.parametersError = '';
+                    } catch (error) {
+                        this.parametersError = 'Invalid JSON';
+                    }
+                },
 
+                async sendCommand() {
+                    if (!this.command || this.selectedClients.length === 0) return;
                     this.isSubmitting = true;
                     try {
-                        const parsedParams = JSON.parse(this.parameters);
-                        
-                        // 并行发送命令到所有选中的客户端
-                        await Promise.all(this.selectedClients.map(async (clientId) => {
-                            const response = await fetch('/api/send_command', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                },
-                                body: JSON.stringify({
-                                    client_id: clientId,
-                                    command: this.command,
-                                    parameters: parsedParams,
-                                }),
-                            });
-
-                            if (!response.ok) {
-                                throw new Error(`Failed to send command to client ${clientId}`);
+                        // 立即更新选中客户端的状态
+                        const commandId = Date.now().toString(); // 生成临时的命令ID
+                        for (const clientId of this.selectedClients) {
+                            const client = this.clients.find(c => c.id === clientId);
+                            if (client) {
+                                if (!client.status) client.status = {};
+                                client.status.current_command = this.command;
+                                client.status.current_command_id = commandId;
                             }
-                        }));
+                        }
 
+                        const response = await fetch('/api/commands', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                client_id: this.selectedClients[0],
+                                command: this.command,
+                                parameters: JSON.parse(this.parameters || '{}')
+                            }),
+                        });
+
+                        if (!response.ok) {
+                            throw new Error('Failed to send command');
+                        }
+
+                        // 清空选中的客户端列表和命令
+                        this.selectedClients = [];
                         this.command = '';
                         this.parameters = '{}';
                     } catch (error) {
                         console.error('Error sending command:', error);
-                        alert('Failed to send command: ' + error.message);
+                        // 如果发送失败，恢复客户端状态
+                        for (const clientId of this.selectedClients) {
+                            const client = this.clients.find(c => c.id === clientId);
+                            if (client && client.status) {
+                                delete client.status.current_command;
+                                delete client.status.current_command_id;
+                            }
+                        }
                     } finally {
                         this.isSubmitting = false;
                     }
-                },
+                }
             }))
         })
     </script>

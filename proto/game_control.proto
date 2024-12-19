@@ -1,55 +1,112 @@
+// 使用proto3语法
 syntax = "proto3";
+
+// 定义包名
 package game_control;
 
-// The game control service definition
+// 游戏控制服务定义
+// 提供了游戏客户端管理、命令下发和状态更新的功能
 service GameControl {
-    // Send command to game client
+    // 向游戏客户端发送命令
+    // 用于控制客户端执行特定操作，如开始测试、停止测试等
     rpc SendCommand (CommandRequest) returns (CommandResponse);
     
-    // Client registration
+    // 客户端注册
+    // 新的客户端连接时需要先注册，获取唯一的client_id
     rpc Register (RegisterRequest) returns (RegisterResponse);
-    
-    // Stream status updates from client
-    rpc StreamStatus (StatusRequest) returns (stream StatusResponse);
+
+    // 获取客户端状态
+    // 用于查询特定客户端的当前状态，包括待执行的命令等
+    rpc GetStatus (StatusRequest) returns (StatusResponse);
+
+    // 更新客户端状态
+    // 客户端定期（通常是每秒）向服务器报告自己的状态
+    rpc UpdateStatus (StatusUpdate) returns (StatusUpdateResponse);
 }
 
-// Command request from web interface to game client
+// 命令请求
+// 从Web界面发送到游戏客户端的命令
 message CommandRequest {
-    string client_id = 1;
-    string command = 2;
-    map<string, string> parameters = 3;
+    string client_id = 1;                    // 目标客户端ID
+    string command = 2;                      // 命令名称
+    map<string, string> parameters = 3;      // 命令参数，键值对形式
 }
 
-// Response from game client after receiving command
+// 命令响应
+// 游戏客户端接收到命令后的响应
 message CommandResponse {
-    bool success = 1;
-    string message = 2;
+    bool success = 1;                        // 命令是否成功接收
+    string message = 2;                      // 响应消息，成功或失败的详细信息
 }
 
-// Client registration request
+// 客户端注册请求
+// 新客户端连接时发送的注册信息
 message RegisterRequest {
-    string client_name = 1;      // Client name for identification
-    string client_type = 2;      // Type of test to perform (e.g., "load_test", "functional_test")
-    uint32 max_players = 3;      // Maximum number of players this client can handle
-    string version = 4;          // Client version for compatibility checking
+    string client_name = 1;      // 客户端名称，用于标识
+    string client_type = 2;      // 客户端类型，如"load_test"（负载测试）或"functional_test"（功能测试）
+    uint32 max_players = 3;      // 该客户端支持的最大玩家数
+    string version = 4;          // 客户端版本号，用于兼容性检查
 }
 
-// Registration response
+// 注册响应
+// 服务器对客户端注册请求的响应
 message RegisterResponse {
-    string client_id = 1;
-    bool success = 2;
-    string message = 3;
+    string client_id = 1;        // 分配给客户端的唯一ID
+    bool success = 2;            // 注册是否成功
+    string message = 3;          // 注册结果消息
 }
 
-// Status request
+// 状态请求
+// 查询特定客户端状态的请求
 message StatusRequest {
-    string client_id = 1;
+    string client_id = 1;        // 要查询的客户端ID
 }
 
-// Status response from game client
+// 待执行的命令
+// 服务器下发给客户端但尚未执行的命令
+message PendingCommand {
+    string command_id = 1;       // 命令的唯一ID
+    string command = 2;          // 命令名称
+    map<string, string> parameters = 3;      // 命令参数，键值对形式
+    int64 created_at = 4;        // 命令创建时间（Unix时间戳）
+}
+
+// 当前执行的命令
+// 客户端正在执行的命令信息
+message CurrentCommand {
+    string command_id = 1;       // 命令的唯一ID
+    string command = 2;          // 命令名称
+    map<string, string> parameters = 3;      // 命令参数，键值对形式
+    int64 started_at = 4;        // 命令开始执行的时间（Unix时间戳）
+}
+
+// 状态响应
+// 包含客户端当前的详细状态信息
 message StatusResponse {
-    string client_id = 1;
-    string status = 2;
-    map<string, string> metrics = 3;
-    int64 timestamp = 4;
+    string client_id = 1;                            // 客户端ID
+    string status = 2;                               // 状态描述
+    map<string, string> metrics = 3;                 // 状态指标
+    int64 timestamp = 4;                             // 状态更新时间（Unix时间戳）
+    repeated PendingCommand pending_commands = 5;     // 待执行的命令列表
+    CurrentCommand current_command = 6;               // 当前正在执行的命令
+}
+
+// 状态更新
+// 客户端定期发送的状态更新信息
+message StatusUpdate {
+    string client_id = 1;                    // 客户端ID
+    map<string, string> metrics = 2;         // 状态指标，包括：
+                                            // - max_idle_players: 最大空闲玩家数
+                                            // - position: 位置信息
+                                            // - current_command_id: 当前执行的命令ID（如果有）
+                                            // - current_command: 当前执行的命令名称（如果有）
+                                            // - command_started_at: 命令开始执行时间（如果有）
+                                            // - completed_command_id: 已完成的命令ID（如果有）
+}
+
+// 状态更新响应
+// 服务器对客户端状态更新的响应
+message StatusUpdateResponse {
+    bool success = 1;            // 状态更新是否成功
+    string message = 2;          // 响应消息
 }
