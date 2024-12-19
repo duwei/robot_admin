@@ -3,52 +3,41 @@ mod web;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tonic::transport::Server;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::grpc::game_control::game_control_server::GameControlServer;
-use crate::grpc::GameControlService;
+use axum::serve;
+use robot_admin::grpc::GameControlService;
+use robot_admin::grpc::game_control::game_control_server::GameControlServer;
+use tonic::transport::Server as TonicServer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing
-    tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::new(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".into()),
-        ))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-
-    // Create and share the game control service
+    // Create the gRPC service
     let game_service = Arc::new(GameControlService::new());
-    let game_service_grpc = game_service.clone();
+    let grpc_service = game_service.clone();
 
     // Start the gRPC server
-    let grpc_addr = "[::1]:50051".parse().unwrap();
-    let grpc_service = GameControlServer::new(game_service_grpc);
+    let grpc_addr = "127.0.0.1:50051".parse()?;
+    println!("Starting gRPC server on {}", grpc_addr);
     
     tokio::spawn(async move {
-        if let Err(e) = Server::builder()
-            .add_service(grpc_service)
+        TonicServer::builder()
+            .add_service(GameControlServer::new(grpc_service))
             .serve(grpc_addr)
             .await
-        {
-            eprintln!("gRPC server error: {}", e);
-        }
+            .unwrap();
     });
 
-    tracing::info!("gRPC server listening on {}", grpc_addr);
+    // Create the web service
+    let app = robot_admin::web::router(game_service);
 
     // Start the web server
     let web_addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    let app = web::create_router(game_service);
-
-    tracing::info!("Web server listening on {}", web_addr);
-    axum::serve(
+    println!("Starting web server on {}", web_addr);
+    
+    serve(
         tokio::net::TcpListener::bind(web_addr).await?,
-        app.into_make_service(),
-    )
-    .await?;
+        app.into_make_service()
+    ).await?;
 
     Ok(())
 }
